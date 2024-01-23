@@ -10,4 +10,6 @@ export type {
   StatelyInspectionEvent,
   StatelyEventEvent,
   StatelySnapshotEvent,
+  Inspector,
+  Adapter,
 } from "./types";
