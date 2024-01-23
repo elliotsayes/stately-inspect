@@ -21,7 +21,13 @@
     "isomorphic-ws": "^5.0.0"
   },
   "peerDependencies": {
-    "xstate": "^5.5.1"
+    "xstate": "^5.5.1",
+    "expo": "*"
+  },
+  "peerDependenciesMeta": {
+    "expo": {
+      "optional": true
+    }
   },
   "scripts": {
     "build": "tsup src/index.ts --dts",
