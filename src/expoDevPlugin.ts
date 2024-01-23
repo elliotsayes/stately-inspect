@@ -1,69 +1,75 @@
 import { InspectorOptions, createInspector } from "./createInspector";
-import { Adapter, StatelyInspectionEvent } from "./types";
-import ExpoDevPlugin from "isomorphic-ws";
+import { Adapter, Inspector, StatelyInspectionEvent } from "./types";
 import safeStringify from "fast-safe-stringify";
-import { Observer, Subscribable, toObserver } from "xstate";
+import { getDevToolsPluginClientAsync } from "expo/devtools";
+
+type DevToolsPluginClient = Awaited<
+  ReturnType<typeof getDevToolsPluginClientAsync>
+>;
 
 export interface ExpoDevPluginInspectorOptions extends InspectorOptions {
-  url: string;
+  syncIntervalMs?: number;
 }
 
 export class ExpoDevPluginAdapter implements Adapter {
-  private ws: ExpoDevPlugin;
-  private status = "closed" as "closed" | "open";
+  private client: DevToolsPluginClient;
+  private get status() {
+    return this.client.isConnected() ? "open" : "closed";
+  }
   private deferredEvents: StatelyInspectionEvent[] = [];
+  // TODO: Correct typing for React Native's setInterval
+  // https://reactnative.dev/docs/timers
+  private syncDeferred: NodeJS.Timeout | undefined;
   private options: Required<ExpoDevPluginInspectorOptions>;
 
-  constructor(options?: ExpoDevPluginInspectorOptions) {
+  constructor(
+    client: DevToolsPluginClient,
+    options?: ExpoDevPluginInspectorOptions
+  ) {
+    this.client = client;
     this.options = {
       filter: () => true,
       serialize: (event) => JSON.parse(safeStringify(event)),
       autoStart: true,
-      url: "ws://localhost:8080",
+      syncIntervalMs: 1000,
       ...options,
     };
   }
   public start() {
-    const start = () => {
-      this.ws = new ExpoDevPlugin(this.options.url);
+    const start = async () => {
+      this.client.addMessageListener(
+        "inspector",
+        (event: { data: unknown }) => {
+          console.warn("unhandled inspector event");
 
-      this.ws.onopen = () => {
-        console.log("ExpoDevPlugin open");
-        this.status = "open";
-        this.deferredEvents.forEach((event) => {
-          this.ws.send(JSON.stringify(event));
-        });
-      };
+          if (typeof event.data !== "string") {
+            return;
+          }
 
-      this.ws.onclose = () => {
-        console.log("ExpoDevPlugin closed");
-      };
-
-      this.ws.onerror = async (event: unknown) => {
-        console.error("ExpoDevPlugin error", event);
-        await new Promise((res) => setTimeout(res, 5000));
-        console.warn("restarting");
-        start();
-      };
-
-      this.ws.onmessage = (event: { data: unknown }) => {
-        if (typeof event.data !== "string") {
-          return;
+          console.log("message", event.data);
         }
-
-        console.log("message", event.data);
-      };
+      );
+      await this.client.initAsync();
+      this.syncDeferred = setInterval(() => {
+        if (this.status === "open") {
+          this.deferredEvents.forEach((deferredEvent) => {
+            this.client.sendMessage("inspect", JSON.stringify(deferredEvent));
+          });
+          this.deferredEvents = [];
+        } else {
+          this.client.initAsync();
+        }
+      }, this.options.syncIntervalMs);
     };
-
     start();
   }
   public stop() {
-    this.ws.close();
-    this.status = "closed";
+    this.syncDeferred && clearInterval(this.syncDeferred);
+    this.client.closeAsync();
   }
   public send(event: StatelyInspectionEvent) {
     if (this.status === "open") {
-      this.ws.send(JSON.stringify(event));
+      this.client.sendMessage("inspect", JSON.stringify(event));
     } else {
       this.deferredEvents.push(event);
     }
@@ -71,57 +77,21 @@ export class ExpoDevPluginAdapter implements Adapter {
 }
 
 export function createExpoDevPluginInspector(
+  client: DevToolsPluginClient,
   options?: ExpoDevPluginInspectorOptions
 ) {
-  const adapter = new ExpoDevPluginAdapter(options);
+  const adapter = new ExpoDevPluginAdapter(client, options);
 
   const inspector = createInspector(adapter, options);
 
   return inspector;
 }
 
-interface ExpoDevPluginReceiver extends Subscribable<StatelyInspectionEvent> {}
-
-export function createExpoDevPluginReceiver(options?: {
-  server: string;
-}): ExpoDevPluginReceiver {
-  const resolvedOptions = {
-    server: "ws://localhost:8080",
-    ...options,
-  };
-
-  const observers = new Set<Observer<StatelyInspectionEvent>>();
-
-  const ws = new ExpoDevPlugin(resolvedOptions.server);
-
-  ws.onopen = () => {
-    console.log("ExpoDevPlugin open");
-
-    ws.onmessage = (event: { data: unknown }) => {
-      if (typeof event.data !== "string") {
-        return;
-      }
-      console.log("message", event.data);
-      const eventData = JSON.parse(event.data);
-
-      observers.forEach((observer) => {
-        observer.next?.(eventData);
-      });
-    };
-  };
-
-  const receiver: ExpoDevPluginReceiver = {
-    subscribe(observerOrFn) {
-      const observer = toObserver(observerOrFn);
-      observers.add(observer);
-
-      return {
-        unsubscribe() {
-          observers.delete(observer);
-        },
-      };
-    },
-  };
-
-  return receiver;
+export function forwardExpoDevToolsToInspector(
+  client: DevToolsPluginClient,
+  targetInspector: Inspector<Adapter>
+) {
+  client.addMessageListener("inspect", (event) =>
+    targetInspector.adapter.send(event)
+  );
 }
