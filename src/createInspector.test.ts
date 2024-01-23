@@ -1,23 +1,27 @@
-import { expect, test } from 'vitest';
-import { createInspector } from './createInspector';
-import { StatelyInspectionEvent, Adapter, StatelyEventEvent } from './types';
-import { createActor, createMachine } from 'xstate';
-import pkg from '../package.json';
-import { StatelyActorEvent } from '../dist';
+import { expect, test } from "vitest";
+import { createInspector } from "./createInspector";
+import {
+  StatelyInspectionEvent,
+  Adapter,
+  StatelyEventEvent,
+  StatelyActorEvent,
+} from "./types";
+import { createActor, createMachine } from "xstate";
+import pkg from "../package.json";
 
 function simplifyEvent(ev: StatelyInspectionEvent) {
-  return ev.type === '@xstate.actor'
+  return ev.type === "@xstate.actor"
     ? { type: ev.type, sessionId: ev.sessionId }
-    : ev.type === '@xstate.event'
+    : ev.type === "@xstate.event"
     ? { type: ev.type, sessionId: ev.sessionId, event: ev.event }
     : {
         type: ev.type,
         sessionId: ev.sessionId,
-        snapshot: 'value' in ev.snapshot ? ev.snapshot.value : ev.snapshot,
+        snapshot: "value" in ev.snapshot ? ev.snapshot.value : ev.snapshot,
       };
 }
 
-test('Creates an inspector for a state machine', async () => {
+test("Creates an inspector for a state machine", async () => {
   const events: StatelyInspectionEvent[] = [];
   const testAdapter: Adapter = {
     send: (event) => {
@@ -30,17 +34,17 @@ test('Creates an inspector for a state machine', async () => {
   const inspector = createInspector(testAdapter);
 
   const machine = createMachine({
-    id: 'trafficLight',
-    initial: 'green',
+    id: "trafficLight",
+    initial: "green",
     states: {
       green: {
         after: {
-          10: 'yellow',
+          10: "yellow",
         },
       },
       yellow: {
         after: {
-          10: 'red',
+          10: "red",
         },
       },
       red: {},
@@ -103,7 +107,7 @@ test('Creates an inspector for a state machine', async () => {
   });
 });
 
-test('Manually inspected events', () => {
+test("Manually inspected events", () => {
   const events: StatelyInspectionEvent[] = [];
   const testAdapter: Adapter = {
     send: (event) => {
@@ -114,16 +118,16 @@ test('Manually inspected events', () => {
   };
   const inspector = createInspector(testAdapter);
 
-  inspector.actor('test');
-  inspector.actor('another', { status: 'active', context: 10 });
-  inspector.event('test', 'stringEvent');
-  inspector.event('another', { type: 'objectEvent' }, { source: 'test' });
-  inspector.snapshot('test', { status: 'active', context: 20 });
+  inspector.actor("test");
+  inspector.actor("another", { status: "active", context: 10 });
+  inspector.event("test", "stringEvent");
+  inspector.event("another", { type: "objectEvent" }, { source: "test" });
+  inspector.snapshot("test", { status: "active", context: 20 });
 
   inspector.snapshot(
-    'another',
-    { status: 'done', context: { foo: 'bar' } },
-    { event: { type: 'objectEvent' } }
+    "another",
+    { status: "done", context: { foo: "bar" } },
+    { event: { type: "objectEvent" } }
   );
 
   expect(events.map(simplifyEvent)).toMatchInlineSnapshot(`
@@ -172,7 +176,7 @@ test('Manually inspected events', () => {
   `);
 });
 
-test('Inspected event includes version', () => {
+test("Inspected event includes version", () => {
   const events: StatelyInspectionEvent[] = [];
   const testAdapter: Adapter = {
     send: (event) => {
@@ -183,12 +187,12 @@ test('Inspected event includes version', () => {
   };
   const inspector = createInspector(testAdapter);
 
-  inspector.actor('test');
+  inspector.actor("test");
 
   expect(events[0]._version).toEqual(pkg.version);
 });
 
-test('options.serialize', async () => {
+test("options.serialize", async () => {
   const events: StatelyInspectionEvent[] = [];
   const testAdapter: Adapter = {
     send: (event) => {
@@ -199,19 +203,19 @@ test('options.serialize', async () => {
   };
   const inspector = createInspector(testAdapter, {
     serialize: (ev) => {
-      if ('snapshot' in ev) {
+      if ("snapshot" in ev) {
         return {
           ...ev,
           snapshot: {
-            context: { user: 'anonymous' },
+            context: { user: "anonymous" },
           } as any,
         };
-      } else if (ev.type === '@xstate.event') {
+      } else if (ev.type === "@xstate.event") {
         return {
           ...ev,
           event: {
             ...ev.event,
-            user: 'anonymous',
+            user: "anonymous",
           },
         };
       } else {
@@ -220,33 +224,33 @@ test('options.serialize', async () => {
     },
   });
 
-  inspector.actor('test', { context: { user: 'David' } });
+  inspector.actor("test", { context: { user: "David" } });
 
   expect((events[0] as StatelyActorEvent).snapshot.context).toEqual({
-    user: 'anonymous',
+    user: "anonymous",
   });
 
-  inspector.snapshot('test', { context: { user: 'David' } });
+  inspector.snapshot("test", { context: { user: "David" } });
 
   expect((events[1] as StatelyActorEvent).snapshot.context).toEqual({
-    user: 'anonymous',
+    user: "anonymous",
   });
 
-  inspector.event('test', { type: 'updateUser', user: 'David' });
+  inspector.event("test", { type: "updateUser", user: "David" });
 
   expect((events[2] as StatelyEventEvent).event).toEqual({
-    type: 'updateUser',
-    user: 'anonymous',
+    type: "updateUser",
+    user: "anonymous",
   });
 
   inspector.inspect.next?.({
-    type: '@xstate.event',
+    type: "@xstate.event",
     actorRef: {} as any,
     event: {
-      type: 'setUser',
-      user: 'Another',
+      type: "setUser",
+      user: "Another",
     },
-    rootId: '',
+    rootId: "",
     sourceRef: undefined,
   });
 
@@ -255,12 +259,12 @@ test('options.serialize', async () => {
   });
 
   expect((events[3] as StatelyEventEvent).event).toEqual({
-    type: 'setUser',
-    user: 'anonymous',
+    type: "setUser",
+    user: "anonymous",
   });
 });
 
-test('it safely stringifies objects with circular dependencies', () => {
+test("it safely stringifies objects with circular dependencies", () => {
   const events: StatelyInspectionEvent[] = [];
   const testAdapter: Adapter = {
     send: (event) => {
@@ -280,11 +284,11 @@ test('it safely stringifies objects with circular dependencies', () => {
 
   expect(() => {
     inspector.inspect.next?.({
-      type: '@xstate.snapshot',
+      type: "@xstate.snapshot",
       snapshot: { context: circular } as any,
       actorRef: {} as any,
-      event: { type: 'any' },
-      rootId: '',
+      event: { type: "any" },
+      rootId: "",
     });
   }).not.toThrow();
 });
