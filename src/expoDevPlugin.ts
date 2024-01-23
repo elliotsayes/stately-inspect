@@ -73,12 +73,3 @@ export function createExpoDevPluginInspector(
 
   return inspector;
 }
-
-export function forwardExpoDevToolsToInspector(
-  client: DevToolsPluginClient,
-  targetInspector: Inspector<Adapter>
-) {
-  return client.addMessageListener("inspect", (event) =>
-    targetInspector.adapter.send(event)
-  );
-}
