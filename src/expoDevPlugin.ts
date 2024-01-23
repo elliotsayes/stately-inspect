@@ -91,7 +91,7 @@ export function forwardExpoDevToolsToInspector(
   client: DevToolsPluginClient,
   targetInspector: Inspector<Adapter>
 ) {
-  client.addMessageListener("inspect", (event) =>
+  return client.addMessageListener("inspect", (event) =>
     targetInspector.adapter.send(event)
   );
 }
