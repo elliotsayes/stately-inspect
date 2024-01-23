@@ -52,7 +52,6 @@ export class ExpoDevPluginAdapter implements Adapter {
   }
   public stop() {
     this.client?.closeAsync();
-    this.client = undefined;
   }
   public send(event: StatelyInspectionEvent) {
     if (this.status === "open") {
