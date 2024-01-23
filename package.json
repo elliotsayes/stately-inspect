@@ -3,6 +3,7 @@
     "@changesets/changelog-github": "^0.5.0",
     "@changesets/cli": "^2.26.2",
     "@types/jsdom": "^21.1.6",
+    "expo": "^50.0.2",
     "jsdom": "^23.0.0",
     "tsup": "^7.2.0",
     "typescript": "^5.1.6",
@@ -21,8 +22,8 @@
     "isomorphic-ws": "^5.0.0"
   },
   "peerDependencies": {
-    "xstate": "^5.5.1",
-    "expo": "*"
+    "expo": "*",
+    "xstate": "^5.5.1"
   },
   "peerDependenciesMeta": {
     "expo": {
