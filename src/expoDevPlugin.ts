@@ -7,39 +7,34 @@ type DevToolsPluginClient = Awaited<
   ReturnType<typeof getDevToolsPluginClientAsync>
 >;
 
-export interface ExpoDevPluginInspectorOptions extends InspectorOptions {
-  syncIntervalMs?: number;
-}
+export interface ExpoDevPluginInspectorOptions extends InspectorOptions {}
 
 export class ExpoDevPluginAdapter implements Adapter {
-  private client: DevToolsPluginClient;
+  private createClient: () => Promise<DevToolsPluginClient>;
+  private client?: DevToolsPluginClient;
   private get status() {
-    return this.client.isConnected() ? "open" : "closed";
+    return this.client?.isConnected() ? "open" : "closed";
   }
   private deferredEvents: StatelyInspectionEvent[] = [];
-  // TODO: Correct typing for React Native's setInterval
-  // https://reactnative.dev/docs/timers
-  private syncDeferred: NodeJS.Timeout | undefined;
   private options: Required<ExpoDevPluginInspectorOptions>;
 
   constructor(
-    client: DevToolsPluginClient,
+    createClient: () => Promise<DevToolsPluginClient>,
     options?: ExpoDevPluginInspectorOptions
   ) {
-    this.client = client;
+    this.createClient = createClient;
     this.options = {
       filter: () => true,
       serialize: (event) => JSON.parse(safeStringify(event)),
       autoStart: true,
-      syncIntervalMs: 1000,
       ...options,
     };
   }
   public start() {
-    const start = async () => {
-      this.client.addMessageListener(
-        "inspector",
-        (event: { data: unknown }) => {
+    const start = () =>
+      this.createClient().then((client) => {
+        this.client = client;
+        client.addMessageListener("inspector", (event: { data: unknown }) => {
           console.warn("unhandled inspector event");
 
           if (typeof event.data !== "string") {
@@ -47,29 +42,21 @@ export class ExpoDevPluginAdapter implements Adapter {
           }
 
           console.log("message", event.data);
-        }
-      );
-      await this.client.initAsync();
-      this.syncDeferred = setInterval(() => {
-        if (this.status === "open") {
-          this.deferredEvents.forEach((deferredEvent) => {
-            this.client.sendMessage("inspect", JSON.stringify(deferredEvent));
-          });
-          this.deferredEvents = [];
-        } else {
-          this.client.initAsync();
-        }
-      }, this.options.syncIntervalMs);
-    };
+        });
+        this.deferredEvents.forEach((deferredEvent) => {
+          client.sendMessage("inspect", JSON.stringify(deferredEvent));
+        });
+        this.deferredEvents = [];
+      });
     start();
   }
   public stop() {
-    this.syncDeferred && clearInterval(this.syncDeferred);
-    this.client.closeAsync();
+    this.client?.closeAsync();
+    this.client = undefined;
   }
   public send(event: StatelyInspectionEvent) {
     if (this.status === "open") {
-      this.client.sendMessage("inspect", JSON.stringify(event));
+      this.client!.sendMessage("inspect", JSON.stringify(event));
     } else {
       this.deferredEvents.push(event);
     }
@@ -77,10 +64,10 @@ export class ExpoDevPluginAdapter implements Adapter {
 }
 
 export function createExpoDevPluginInspector(
-  client: DevToolsPluginClient,
+  createClient: () => Promise<DevToolsPluginClient>,
   options?: ExpoDevPluginInspectorOptions
 ) {
-  const adapter = new ExpoDevPluginAdapter(client, options);
+  const adapter = new ExpoDevPluginAdapter(createClient, options);
 
   const inspector = createInspector(adapter, options);
 
